@@ -1,10 +1,10 @@
 /**
  * Outreach data adapter.
- * Swap `fetchOutreachRecords` implementation to pull from Supabase when ready.
+ * Swap implementations to pull from / write to Supabase when ready.
  * The page consumes only this interface — no changes needed in UI layer.
  */
 
-import type { OutreachRecord } from './types'
+import type { OutreachRecord, OutreachStatus } from './types'
 
 // ---------------------------------------------------------------------------
 // MOCK DATA — replace with Supabase query when backend is wired
@@ -90,6 +90,21 @@ const MOCK_RECORDS: OutreachRecord[] = [
     assigned_to: 'Alex',
   },
 ]
+
+export async function updateOutreachStatus(id: string, status: OutreachStatus): Promise<void> {
+  // TODO: replace with Supabase:
+  // const { error } = await supabase
+  //   .from('outreach_records')
+  //   .update({ status })
+  //   .eq('id', id)
+  // if (error) throw new Error(error.message)
+
+  await new Promise((r) => setTimeout(r, 150)) // simulate latency
+
+  const record = MOCK_RECORDS.find((r) => r.id === id)
+  if (!record) throw new Error(`Record ${id} not found`)
+  record.status = status
+}
 
 export interface FetchOutreachOptions {
   category?: string

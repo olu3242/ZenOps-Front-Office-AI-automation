@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { fetchOutreachRecords } from '@/lib/outreach/adapter'
+import { fetchOutreachRecords, updateOutreachStatus } from '@/lib/outreach/adapter'
 import type { OutreachRecord, OutreachStatus, OutreachCategory } from '@/lib/outreach/types'
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,8 @@ export default function OutreachPage() {
   const [error, setError] = useState<string | null>(null)
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -82,6 +84,29 @@ export default function OutreachPage() {
   }, [filterCategory, filterStatus])
 
   useEffect(() => { load() }, [load])
+
+  const handleStatusChange = useCallback(async (
+    id: string,
+    newStatus: OutreachStatus,
+    prevStatus: OutreachStatus,
+  ) => {
+    if (newStatus === prevStatus) return
+
+    // Optimistic update
+    setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: newStatus } : r))
+    setSavingIds((prev) => new Set(prev).add(id))
+    setRowErrors((prev) => { const next = { ...prev }; delete next[id]; return next })
+
+    try {
+      await updateOutreachStatus(id, newStatus)
+    } catch {
+      // Roll back to previous status
+      setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r))
+      setRowErrors((prev) => ({ ...prev, [id]: 'Save failed — try again.' }))
+    } finally {
+      setSavingIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,9 +223,24 @@ export default function OutreachPage() {
                       {CATEGORY_LABELS[r.category]}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status]}`}>
-                        {STATUS_LABELS[r.status]}
-                      </span>
+                      <select
+                        value={r.status}
+                        disabled={savingIds.has(r.id)}
+                        onChange={(e) =>
+                          handleStatusChange(r.id, e.target.value as OutreachStatus, r.status)
+                        }
+                        className={`text-xs font-medium rounded px-2 py-0.5 border border-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 cursor-pointer disabled:cursor-wait disabled:opacity-60 ${STATUS_COLORS[r.status]}`}
+                      >
+                        {ALL_STATUSES.map((s) => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
+                      {savingIds.has(r.id) && (
+                        <div className="text-xs text-gray-400 mt-0.5">Saving…</div>
+                      )}
+                      {rowErrors[r.id] && (
+                        <div className="text-xs text-red-500 mt-0.5">{rowErrors[r.id]}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 tabular-nums">
                       {r.last_activity_date}
