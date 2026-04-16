@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { fetchOutreachRecords, updateOutreachStatus } from '@/lib/outreach/adapter'
+import { supabase } from '@/lib/supabase'
 import type { OutreachRecord, OutreachStatus, OutreachCategory } from '@/lib/outreach/types'
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_LABELS) as OutreachCategory[]
 // Component
 // ---------------------------------------------------------------------------
 export default function OutreachPage() {
+  const router = useRouter()
   const [records, setRecords] = useState<OutreachRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +69,20 @@ export default function OutreachPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
+
+  const handleSignOut = useCallback(async () => {
+    setSigningOut(true)
+    setSignOutError(null)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setSignOutError('Sign-out failed. Try again.')
+      setSigningOut(false)
+      return
+    }
+    router.push('/auth/signin')
+  }, [router])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -117,12 +134,23 @@ export default function OutreachPage() {
             <h1 className="text-lg font-semibold text-gray-900">Outreach Tracker</h1>
             <p className="text-sm text-gray-500 mt-0.5">Front Office Audit pipeline</p>
           </div>
-          <a
-            href="/ops/audits"
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Audits →
-          </a>
+          <div className="flex items-center gap-4">
+            <a href="/ops/audits" className="text-sm text-blue-600 hover:underline">
+              Audits →
+            </a>
+            <div className="flex flex-col items-end">
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="text-sm text-gray-400 hover:text-gray-600 disabled:cursor-wait disabled:opacity-50 transition-colors"
+              >
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+              {signOutError && (
+                <span className="text-xs text-red-500 mt-0.5">{signOutError}</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
