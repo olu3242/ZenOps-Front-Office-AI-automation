@@ -1,111 +1,99 @@
 /**
  * Outreach data adapter.
- * Swap implementations to pull from / write to Supabase when ready.
- * The page consumes only this interface — no changes needed in UI layer.
+ * Exported function signatures are stable — the page needs no changes.
+ * All Supabase interaction is isolated here.
  */
 
-import type { OutreachRecord, OutreachStatus } from './types'
+import { supabase } from '@/lib/supabase'
+import type { OutreachRecord, OutreachCategory, OutreachStatus } from './types'
 
 // ---------------------------------------------------------------------------
-// MOCK DATA — replace with Supabase query when backend is wired
+// Row type returned by Supabase (mirrors DB columns)
 // ---------------------------------------------------------------------------
-const MOCK_RECORDS: OutreachRecord[] = [
-  {
-    id: '1',
-    company_name: 'The Grand Hotel',
-    contact_name: 'Sarah Patel',
-    contact_title: 'GM',
-    contact_email: 'sarah@grandhotel.com',
-    category: 'hotel',
-    status: 'audit_booked',
-    last_activity_date: '2026-04-14',
-    notes: 'Call booked for April 20',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '2',
-    company_name: 'Meridian Bistro',
-    contact_name: 'James Wu',
-    contact_title: 'Owner',
-    category: 'restaurant',
-    status: 'follow_up_2',
-    last_activity_date: '2026-04-10',
-    notes: 'No response after first two touches',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '3',
-    company_name: 'ClearPath Legal',
-    contact_name: 'Monica Ross',
-    contact_title: 'Operations Director',
-    contact_email: 'monica@clearpathlaw.com',
-    category: 'professional_services',
-    status: 'conversation_started',
-    last_activity_date: '2026-04-13',
-    notes: 'Interested — needs to check budget',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '4',
-    company_name: 'Bloom Wellness Clinic',
-    contact_name: 'Dr. Reena Sharma',
-    contact_title: 'Founder',
-    category: 'healthcare',
-    status: 'lead_identified',
-    last_activity_date: '2026-04-15',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '5',
-    company_name: 'Oakline Boutique',
-    contact_name: 'Tom Fielding',
-    contact_title: 'CEO',
-    contact_email: 'tom@oakline.co',
-    category: 'retail',
-    status: 'proposal_sent',
-    last_activity_date: '2026-04-09',
-    notes: 'Sent proposal deck, awaiting response',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '6',
-    company_name: 'Harbor View Suites',
-    contact_name: 'Carla Diaz',
-    contact_title: 'Front Office Manager',
-    category: 'hotel',
-    status: 'audit_completed',
-    last_activity_date: '2026-04-08',
-    notes: 'Audit done. Moving to proposal phase.',
-    assigned_to: 'Alex',
-  },
-  {
-    id: '7',
-    company_name: 'Vertex Consulting',
-    contact_name: 'Neil Chen',
-    contact_title: 'Partner',
-    category: 'professional_services',
-    status: 'lost',
-    last_activity_date: '2026-03-28',
-    notes: 'Chose internal solution',
-    assigned_to: 'Alex',
-  },
-]
-
-export async function updateOutreachStatus(id: string, status: OutreachStatus): Promise<void> {
-  // TODO: replace with Supabase:
-  // const { error } = await supabase
-  //   .from('outreach_records')
-  //   .update({ status })
-  //   .eq('id', id)
-  // if (error) throw new Error(error.message)
-
-  await new Promise((r) => setTimeout(r, 150)) // simulate latency
-
-  const record = MOCK_RECORDS.find((r) => r.id === id)
-  if (!record) throw new Error(`Record ${id} not found`)
-  record.status = status
+interface DBRow {
+  id: string
+  business_name: string
+  category: string
+  city: string | null
+  website: string | null
+  phone: string | null
+  email: string | null
+  contact_name: string | null
+  contact_role: string | null
+  google_reviews: number | null
+  google_rating: number | null
+  has_estimate_form: boolean | null
+  has_chat_widget: boolean | null
+  likely_lead_volume: string | null
+  priority_score: number | null
+  personalization_note: string | null
+  outreach_channel: string | null
+  first_contact_date: string | null
+  follow_up_1_date: string | null
+  follow_up_2_date: string | null
+  follow_up_3_date: string | null
+  status: string
+  audit_booked: boolean | null
+  audit_date: string | null
+  audit_completed: boolean | null
+  proposal_sent: boolean | null
+  proposal_date: string | null
+  closed: boolean | null
+  outcome: string | null
+  setup_fee: number | null
+  monthly_fee: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
 }
 
+// ---------------------------------------------------------------------------
+// Map DB row → OutreachRecord (UI shape)
+// ---------------------------------------------------------------------------
+function mapRow(row: DBRow): OutreachRecord {
+  return {
+    // existing UI fields
+    id: row.id,
+    company_name: row.business_name,
+    contact_name: row.contact_name ?? '',
+    contact_title: row.contact_role ?? undefined,
+    contact_email: row.email ?? undefined,
+    category: row.category as OutreachCategory,
+    status: row.status as OutreachStatus,
+    last_activity_date: row.updated_at.split('T')[0],
+    notes: row.notes ?? undefined,
+
+    // extended fields
+    city: row.city ?? undefined,
+    website: row.website ?? undefined,
+    phone: row.phone ?? undefined,
+    google_reviews: row.google_reviews ?? undefined,
+    google_rating: row.google_rating ?? undefined,
+    has_estimate_form: row.has_estimate_form ?? undefined,
+    has_chat_widget: row.has_chat_widget ?? undefined,
+    likely_lead_volume: row.likely_lead_volume ?? undefined,
+    priority_score: row.priority_score ?? undefined,
+    personalization_note: row.personalization_note ?? undefined,
+    outreach_channel: row.outreach_channel ?? undefined,
+    first_contact_date: row.first_contact_date ?? undefined,
+    follow_up_1_date: row.follow_up_1_date ?? undefined,
+    follow_up_2_date: row.follow_up_2_date ?? undefined,
+    follow_up_3_date: row.follow_up_3_date ?? undefined,
+    audit_booked: row.audit_booked ?? undefined,
+    audit_date: row.audit_date ?? undefined,
+    audit_completed: row.audit_completed ?? undefined,
+    proposal_sent: row.proposal_sent ?? undefined,
+    proposal_date: row.proposal_date ?? undefined,
+    closed: row.closed ?? undefined,
+    outcome: row.outcome ?? undefined,
+    setup_fee: row.setup_fee ?? undefined,
+    monthly_fee: row.monthly_fee ?? undefined,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 export interface FetchOutreachOptions {
   category?: string
   status?: string
@@ -114,17 +102,26 @@ export interface FetchOutreachOptions {
 export async function fetchOutreachRecords(
   opts: FetchOutreachOptions = {}
 ): Promise<OutreachRecord[]> {
-  // TODO: replace with Supabase:
-  // const { data, error } = await supabase
-  //   .from('outreach_records')
-  //   .select('*')
-  //   .order('last_activity_date', { ascending: false })
-  //   .match({ ...(opts.category ? { category: opts.category } : {}), ... })
+  let query = supabase
+    .from('outreach_records')
+    .select('*')
+    .order('updated_at', { ascending: false })
 
-  await new Promise((r) => setTimeout(r, 120)) // simulate latency
+  if (opts.category) query = query.eq('category', opts.category)
+  if (opts.status) query = query.eq('status', opts.status)
 
-  let records = [...MOCK_RECORDS]
-  if (opts.category) records = records.filter((r) => r.category === opts.category)
-  if (opts.status) records = records.filter((r) => r.status === opts.status)
-  return records.sort((a, b) => b.last_activity_date.localeCompare(a.last_activity_date))
+  const { data, error } = await query
+
+  if (error) throw new Error(`Failed to fetch outreach records: ${error.message}`)
+
+  return (data as DBRow[]).map(mapRow)
+}
+
+export async function updateOutreachStatus(id: string, status: OutreachStatus): Promise<void> {
+  const { error } = await supabase
+    .from('outreach_records')
+    .update({ status })      // updated_at is handled by DB trigger
+    .eq('id', id)
+
+  if (error) throw new Error(`Failed to update status: ${error.message}`)
 }
