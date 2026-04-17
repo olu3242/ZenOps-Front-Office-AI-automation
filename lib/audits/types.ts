@@ -47,5 +47,14 @@ export interface AuditRecord {
   recommended_package: AuditPackage | null
   status: AuditStatus
   created_at: string
-  updated_at: string
+  updated_at: string  // required for concurrency-safe updates
+}
+
+export interface AuditStatusHistoryEntry {
+  id: string
+  audit_id: string
+  old_status: AuditStatus | null
+  new_status: AuditStatus
+  changed_by: string | null
+  changed_at: string
 }

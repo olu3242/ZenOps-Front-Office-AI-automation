@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase'
-import type { AuditRecord, AuditStatus } from './types'
+import type { AuditRecord, AuditStatus, AuditStatusHistoryEntry } from './types'
 
 export async function submitAuditRequest(data: Record<string, string>): Promise<void> {
   // Strip empty strings so optional fields store null, not empty string
@@ -26,10 +26,43 @@ export async function fetchAuditRecords(): Promise<AuditRecord[]> {
   return (data ?? []) as AuditRecord[]
 }
 
-export async function updateAuditStatus(id: string, status: AuditStatus): Promise<void> {
-  const { error } = await supabase
+/**
+ * Concurrency-safe status update.
+ *
+ * The update is conditional on `updatedAt` matching the DB row's current
+ * updated_at.  If another user updated the row in the meantime, Supabase
+ * returns 0 rows and we throw CONCURRENCY_CONFLICT so the caller can
+ * surface the right toast message and roll back the optimistic change.
+ *
+ * @returns The full updated record (with refreshed updated_at) so the
+ *          caller can sync local state for the next save.
+ */
+export async function updateAuditStatus(
+  id: string,
+  status: AuditStatus,
+  updatedAt: string,
+): Promise<AuditRecord> {
+  const { data, error } = await supabase
     .from('front_office_audits')
     .update({ status })
     .eq('id', id)
+    .eq('updated_at', updatedAt)
+    .select()
+
   if (error) throw new Error(`Failed to update audit status: ${error.message}`)
+  if (!data || data.length === 0) throw new Error('CONCURRENCY_CONFLICT')
+
+  return data[0] as AuditRecord
+}
+
+export async function fetchAuditStatusHistory(
+  auditId: string,
+): Promise<AuditStatusHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from('audit_status_history')
+    .select('*')
+    .eq('audit_id', auditId)
+    .order('changed_at', { ascending: false })
+  if (error) throw new Error(`Failed to fetch audit history: ${error.message}`)
+  return (data ?? []) as AuditStatusHistoryEntry[]
 }

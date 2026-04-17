@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAuditRecords, updateAuditStatus } from '@/lib/audits/adapter'
 import { supabase } from '@/lib/supabase'
+import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
+import { useToast } from '@/hooks/useToast'
+import { ToastContainer } from '@/components/ui/Toast'
 import type { AuditRecord, AuditStatus } from '@/lib/audits/types'
 
 const ALL_STATUSES: AuditStatus[] = [
@@ -41,12 +44,12 @@ const RATING_COLORS: Record<string, string> = {
 
 export default function AuditsPage() {
   const router = useRouter()
-  const [records, setRecords] = useState<AuditRecord[]>([])
+  const { toasts, addToast, dismiss } = useToast()
+  const { records, setRecords, savingIds, updateStatus } = useOptimisticStatus<AuditRecord>([])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
   const [signingOut, setSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
 
@@ -60,7 +63,7 @@ export default function AuditsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [setRecords])
 
   useEffect(() => { load() }, [load])
 
@@ -77,28 +80,27 @@ export default function AuditsPage() {
   }, [router])
 
   const handleStatusChange = useCallback(async (
-    id: string,
+    record: AuditRecord,
     newStatus: AuditStatus,
-    prevStatus: AuditStatus,
   ) => {
-    if (newStatus === prevStatus) return
+    if (newStatus === record.status) return
 
-    setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: newStatus } : r))
-    setSavingIds((prev) => new Set(prev).add(id))
-    setRowErrors((prev) => { const next = { ...prev }; delete next[id]; return next })
-
-    try {
-      await updateAuditStatus(id, newStatus)
-    } catch {
-      setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r))
-      setRowErrors((prev) => ({ ...prev, [id]: 'Save failed — try again.' }))
-    } finally {
-      setSavingIds((prev) => { const next = new Set(prev); next.delete(id); return next })
-    }
-  }, [])
+    await updateStatus({
+      id: record.id,
+      optimistic: { status: newStatus },
+      apiCall: () => updateAuditStatus(record.id, newStatus, record.updated_at),
+      onSuccess:  () => addToast('Status updated', 'success'),
+      onConflict: () => {
+        addToast('Updated by another user — refreshing', 'error')
+        load()
+      },
+      onError: () => addToast('Update failed, reverted', 'error'),
+    })
+  }, [updateStatus, addToast, load])
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div>
@@ -106,9 +108,9 @@ export default function AuditsPage() {
             <p className="text-sm text-gray-500 mt-0.5">Front Office Audit submissions</p>
           </div>
           <div className="flex items-center gap-4">
-            <a href="/ops/outreach" className="text-sm text-blue-600 hover:underline">
-              ← Outreach
-            </a>
+            <a href="/ops/leads"    className="text-sm text-blue-600 hover:underline">Leads</a>
+            <a href="/ops/tasks"    className="text-sm text-blue-600 hover:underline">Tasks</a>
+            <a href="/ops/outreach" className="text-sm text-blue-600 hover:underline">← Outreach</a>
             <div className="flex flex-col items-end">
               <button
                 onClick={handleSignOut}
@@ -126,7 +128,6 @@ export default function AuditsPage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-
         {loading && (
           <div className="py-16 text-center text-sm text-gray-400">Loading…</div>
         )}
@@ -134,7 +135,9 @@ export default function AuditsPage() {
         {error && !loading && (
           <div className="py-10 text-center">
             <p className="text-sm text-red-600">{error}</p>
-            <button onClick={load} className="mt-3 text-sm text-blue-600 hover:underline">Retry</button>
+            <button onClick={load} className="mt-3 text-sm text-blue-600 hover:underline">
+              Retry
+            </button>
           </div>
         )}
 
@@ -176,13 +179,15 @@ export default function AuditsPage() {
                       <td className="px-4 py-3 font-medium text-gray-900">{r.business_name}</td>
                       <td className="px-4 py-3 text-gray-700">{r.contact_name ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.industry ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 tabular-nums">{r.created_at.split('T')[0]}</td>
+                      <td className="px-4 py-3 text-gray-500 tabular-nums">
+                        {r.created_at.split('T')[0]}
+                      </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <select
                           value={r.status}
                           disabled={savingIds.has(r.id)}
                           onChange={(e) =>
-                            handleStatusChange(r.id, e.target.value as AuditStatus, r.status)
+                            handleStatusChange(r, e.target.value as AuditStatus)
                           }
                           className={`text-xs font-medium rounded px-2 py-0.5 border border-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 cursor-pointer disabled:cursor-wait disabled:opacity-60 ${STATUS_COLORS[r.status]}`}
                         >
@@ -193,11 +198,10 @@ export default function AuditsPage() {
                         {savingIds.has(r.id) && (
                           <div className="text-xs text-gray-400 mt-0.5">Saving…</div>
                         )}
-                        {rowErrors[r.id] && (
-                          <div className="text-xs text-red-500 mt-0.5">{rowErrors[r.id]}</div>
-                        )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 tabular-nums">{r.audit_score ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-700 tabular-nums">
+                        {r.audit_score ?? '—'}
+                      </td>
                       <td className="px-4 py-3">
                         {r.audit_rating ? (
                           <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${RATING_COLORS[r.audit_rating] ?? ''}`}>
@@ -205,7 +209,9 @@ export default function AuditsPage() {
                           </span>
                         ) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{r.recommended_package ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">
+                        {r.recommended_package ?? '—'}
+                      </td>
                     </tr>
                     {expandedId === r.id && (
                       <tr className="bg-blue-50/20 border-b border-gray-100">
@@ -223,29 +229,30 @@ export default function AuditsPage() {
             </div>
           </div>
         )}
-
       </div>
+
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
     </div>
   )
 }
 
 function DetailPanel({ record: r }: { record: AuditRecord }) {
   const rows: [string, string | number | null | undefined][] = [
-    ['Email',                   r.email],
-    ['Phone',                   r.phone],
-    ['Website',                 r.website],
-    ['Best contact method',     r.best_contact_method],
-    ['Lead sources',            r.lead_sources],
-    ['Current lead flow',       r.current_lead_flow],
-    ['Inbound owner',           r.inbound_owner],
-    ['Response speed',          r.response_speed],
-    ['Missed call process',     r.missed_call_process],
-    ['Post-estimate process',   r.post_estimate_process],
-    ['Follow-up owner',         r.follow_up_owner],
-    ['Customer value',          r.approximate_customer_value],
-    ['Biggest frustration',     r.biggest_front_office_frustration],
-    ['Key revenue leaks',       r.key_revenue_leaks],
-    ['Recommended starting fix',r.recommended_starting_fix],
+    ['Email',                    r.email],
+    ['Phone',                    r.phone],
+    ['Website',                  r.website],
+    ['Best contact method',      r.best_contact_method],
+    ['Lead sources',             r.lead_sources],
+    ['Current lead flow',        r.current_lead_flow],
+    ['Inbound owner',            r.inbound_owner],
+    ['Response speed',           r.response_speed],
+    ['Missed call process',      r.missed_call_process],
+    ['Post-estimate process',    r.post_estimate_process],
+    ['Follow-up owner',          r.follow_up_owner],
+    ['Customer value',           r.approximate_customer_value],
+    ['Biggest frustration',      r.biggest_front_office_frustration],
+    ['Key revenue leaks',        r.key_revenue_leaks],
+    ['Recommended starting fix', r.recommended_starting_fix],
   ]
 
   const filled = rows.filter(([, v]) => v !== null && v !== undefined && v !== '')
