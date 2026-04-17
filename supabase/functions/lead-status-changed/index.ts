@@ -1,59 +1,50 @@
+/**
+ * lead-status-changed
+ *
+ * Thin forwarder — maps DB trigger payload to the standard event schema
+ * and delegates all logic to process-automation-event.
+ */
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
-interface LeadStatusPayload {
-  lead_id: string
-  old_status: string
-  new_status: string
-  changed_by?: string
-}
+const PROCESSOR_URL =
+  `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automation-event`
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 serve(async (req: Request): Promise<Response> => {
   try {
-    const payload: LeadStatusPayload = await req.json()
-    const { lead_id, old_status, new_status, changed_by } = payload
+    const { lead_id, old_status, new_status, changed_by } = await req.json()
 
     if (!lead_id || !new_status) {
-      return new Response(
-        JSON.stringify({ error: 'lead_id and new_status are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'lead_id and new_status are required' }, 400)
     }
 
-    console.log(`[lead-status-changed] ${lead_id}: ${old_status} → ${new_status} (by ${changed_by ?? 'system'})`)
+    const res = await fetch(PROCESSOR_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        entity_id:   lead_id,
+        entity_type: 'lead',
+        event_type:  'status_changed',
+        payload:     { old_status, new_status, changed_by: changed_by ?? null },
+      }),
+    })
 
-    // -----------------------------------------------------------------------
-    // Automation routing
-    // -----------------------------------------------------------------------
+    const result = await res.json()
+    return json(result, res.status)
 
-    if (new_status === 'contacted') {
-      // TODO: start cadence timer, log first-touch in CRM
-      console.log(`[lead-status-changed] Lead ${lead_id} contacted → start follow-up cadence`)
-    }
-
-    if (new_status === 'qualified') {
-      // TODO: assign to sales rep, trigger outreach sequence, create audit task
-      console.log(`[lead-status-changed] Lead ${lead_id} qualified → trigger sales sequence`)
-    }
-
-    if (new_status === 'converted') {
-      // TODO: create front_office_audit record, notify ops, start onboarding
-      console.log(`[lead-status-changed] Lead ${lead_id} converted → create onboarding workflow`)
-    }
-
-    if (new_status === 'lost') {
-      // TODO: add to re-engagement list, tag in CRM
-      console.log(`[lead-status-changed] Lead ${lead_id} lost → add to re-engagement sequence`)
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, lead_id, transition: `${old_status}→${new_status}` }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    )
   } catch (err) {
-    console.error('[lead-status-changed] Error:', err)
-    return new Response(
-      JSON.stringify({ error: 'Internal error', detail: String(err) }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    )
+    console.error('[lead-status-changed]', err)
+    return json({ error: String(err) }, 500)
   }
 })
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

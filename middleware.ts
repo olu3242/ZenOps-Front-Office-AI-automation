@@ -55,6 +55,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Only runs on /ops/* — all other routes are unaffected
-  matcher: ['/ops/:path*'],
+  matcher: ['/ops/:path*', '/automation/:path*'],
 }

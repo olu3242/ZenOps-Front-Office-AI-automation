@@ -1,54 +1,50 @@
+/**
+ * task-status-changed
+ *
+ * Thin forwarder — maps DB trigger payload to the standard event schema
+ * and delegates all logic to process-automation-event.
+ */
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
-interface TaskStatusPayload {
-  task_id: string
-  old_status: string
-  new_status: string
-  changed_by?: string
-}
+const PROCESSOR_URL =
+  `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-automation-event`
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 serve(async (req: Request): Promise<Response> => {
   try {
-    const payload: TaskStatusPayload = await req.json()
-    const { task_id, old_status, new_status, changed_by } = payload
+    const { task_id, old_status, new_status, changed_by } = await req.json()
 
     if (!task_id || !new_status) {
-      return new Response(
-        JSON.stringify({ error: 'task_id and new_status are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'task_id and new_status are required' }, 400)
     }
 
-    console.log(`[task-status-changed] ${task_id}: ${old_status} → ${new_status} (by ${changed_by ?? 'system'})`)
+    const res = await fetch(PROCESSOR_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        entity_id:   task_id,
+        entity_type: 'task',
+        event_type:  'status_changed',
+        payload:     { old_status, new_status, changed_by: changed_by ?? null },
+      }),
+    })
 
-    // -----------------------------------------------------------------------
-    // Automation routing
-    // -----------------------------------------------------------------------
+    const result = await res.json()
+    return json(result, res.status)
 
-    if (new_status === 'in_progress') {
-      // TODO: start SLA timer, notify assignee
-      console.log(`[task-status-changed] Task ${task_id} in_progress → start SLA timer`)
-    }
-
-    if (new_status === 'blocked') {
-      // TODO: escalate to manager, create unblock sub-task, send alert
-      console.log(`[task-status-changed] Task ${task_id} BLOCKED → escalate and notify manager`)
-    }
-
-    if (new_status === 'done') {
-      // TODO: mark parent workflow step complete, check if all tasks done → advance audit status
-      console.log(`[task-status-changed] Task ${task_id} done → mark workflow step complete`)
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, task_id, transition: `${old_status}→${new_status}` }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    )
   } catch (err) {
-    console.error('[task-status-changed] Error:', err)
-    return new Response(
-      JSON.stringify({ error: 'Internal error', detail: String(err) }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    )
+    console.error('[task-status-changed]', err)
+    return json({ error: String(err) }, 500)
   }
 })
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
