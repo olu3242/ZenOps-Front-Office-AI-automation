@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase'
-import type { AuditRecord } from './types'
+import type { AuditRecord, AuditStatus } from './types'
 
 export async function submitAuditRequest(data: Record<string, string>): Promise<void> {
   // Strip empty strings so optional fields store null, not empty string
@@ -24,4 +24,12 @@ export async function fetchAuditRecords(): Promise<AuditRecord[]> {
     .order('created_at', { ascending: false })
   if (error) throw new Error(`Failed to fetch audit records: ${error.message}`)
   return (data ?? []) as AuditRecord[]
+}
+
+export async function updateAuditStatus(id: string, status: AuditStatus): Promise<void> {
+  const { error } = await supabase
+    .from('front_office_audits')
+    .update({ status })
+    .eq('id', id)
+  if (error) throw new Error(`Failed to update audit status: ${error.message}`)
 }

@@ -1,8 +1,15 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
-import { fetchAuditRecords } from '@/lib/audits/adapter'
+import { useRouter } from 'next/navigation'
+import { fetchAuditRecords, updateAuditStatus } from '@/lib/audits/adapter'
+import { supabase } from '@/lib/supabase'
 import type { AuditRecord, AuditStatus } from '@/lib/audits/types'
+
+const ALL_STATUSES: AuditStatus[] = [
+  'submitted', 'scheduled', 'completed', 'no_show',
+  'proposal_sent', 'won', 'lost', 'not_a_fit',
+]
 
 const STATUS_LABELS: Record<AuditStatus, string> = {
   submitted:      'Submitted',
@@ -33,17 +40,22 @@ const RATING_COLORS: Record<string, string> = {
 }
 
 export default function AuditsPage() {
+  const router = useRouter()
   const [records, setRecords] = useState<AuditRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       setRecords(await fetchAuditRecords())
-    } catch (e) {
+    } catch {
       setError('Failed to load audit records. Please try again.')
     } finally {
       setLoading(false)
@@ -51,6 +63,39 @@ export default function AuditsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleSignOut = useCallback(async () => {
+    setSigningOut(true)
+    setSignOutError(null)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setSignOutError('Sign-out failed. Try again.')
+      setSigningOut(false)
+      return
+    }
+    router.push('/auth/signin')
+  }, [router])
+
+  const handleStatusChange = useCallback(async (
+    id: string,
+    newStatus: AuditStatus,
+    prevStatus: AuditStatus,
+  ) => {
+    if (newStatus === prevStatus) return
+
+    setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: newStatus } : r))
+    setSavingIds((prev) => new Set(prev).add(id))
+    setRowErrors((prev) => { const next = { ...prev }; delete next[id]; return next })
+
+    try {
+      await updateAuditStatus(id, newStatus)
+    } catch {
+      setRecords((prev) => prev.map((r) => r.id === id ? { ...r, status: prevStatus } : r))
+      setRowErrors((prev) => ({ ...prev, [id]: 'Save failed — try again.' }))
+    } finally {
+      setSavingIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,9 +105,23 @@ export default function AuditsPage() {
             <h1 className="text-lg font-semibold text-gray-900">Audits</h1>
             <p className="text-sm text-gray-500 mt-0.5">Front Office Audit submissions</p>
           </div>
-          <a href="/ops/outreach" className="text-sm text-blue-600 hover:underline">
-            ← Outreach
-          </a>
+          <div className="flex items-center gap-4">
+            <a href="/ops/outreach" className="text-sm text-blue-600 hover:underline">
+              ← Outreach
+            </a>
+            <div className="flex flex-col items-end">
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="text-sm text-gray-400 hover:text-gray-600 disabled:cursor-wait disabled:opacity-50 transition-colors"
+              >
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+              {signOutError && (
+                <span className="text-xs text-red-500 mt-0.5">{signOutError}</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -118,10 +177,25 @@ export default function AuditsPage() {
                       <td className="px-4 py-3 text-gray-700">{r.contact_name ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.industry ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-500 tabular-nums">{r.created_at.split('T')[0]}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status]}`}>
-                          {STATUS_LABELS[r.status]}
-                        </span>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={r.status}
+                          disabled={savingIds.has(r.id)}
+                          onChange={(e) =>
+                            handleStatusChange(r.id, e.target.value as AuditStatus, r.status)
+                          }
+                          className={`text-xs font-medium rounded px-2 py-0.5 border border-transparent focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 cursor-pointer disabled:cursor-wait disabled:opacity-60 ${STATUS_COLORS[r.status]}`}
+                        >
+                          {ALL_STATUSES.map((s) => (
+                            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                        {savingIds.has(r.id) && (
+                          <div className="text-xs text-gray-400 mt-0.5">Saving…</div>
+                        )}
+                        {rowErrors[r.id] && (
+                          <div className="text-xs text-red-500 mt-0.5">{rowErrors[r.id]}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-700 tabular-nums">{r.audit_score ?? '—'}</td>
                       <td className="px-4 py-3">
