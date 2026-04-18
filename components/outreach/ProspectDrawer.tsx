@@ -81,6 +81,7 @@ export function ProspectDrawer({ initial, saving, onSave, onClose }: Props) {
       : { ...BLANK }
   )
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'form' | 'templates'>('form')
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -116,20 +117,32 @@ export function ProspectDrawer({ initial, saving, onSave, onClose }: Props) {
       {/* Panel */}
       <div className="w-full max-w-md bg-white shadow-xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-          <h2 className="text-sm font-semibold text-gray-900">
-            {isEdit ? 'Edit Prospect' : 'Add Prospect'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-            aria-label="Close"
-          >
-            &times;
-          </button>
+        <div className="px-5 pt-4 border-b border-gray-200 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">
+              {isEdit ? 'Edit Prospect' : 'Add Prospect'}
+            </h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none" aria-label="Close">&times;</button>
+          </div>
+          <div className="flex gap-4 text-sm">
+            {(['form', 'templates'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`pb-2 border-b-2 font-medium capitalize transition-colors ${tab === t ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                {t === 'form' ? (isEdit ? 'Edit' : 'Details') : 'Email Templates'}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Templates tab */}
+        {tab === 'templates' && (
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+            <EmailTemplates prospect={form} />
+          </div>
+        )}
+
         {/* Form */}
+        {tab === 'form' && (
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
 
           <div>
@@ -262,25 +275,123 @@ export function ProspectDrawer({ initial, saving, onSave, onClose }: Props) {
             <p className="text-xs text-red-600">{validationError}</p>
           )}
         </form>
+        )}
 
-        {/* Footer */}
+        {/* Footer — only on form tab */}
+        {tab === 'form' && (
         <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="text-sm bg-gray-900 text-white rounded-md px-5 py-2 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
-          >
+          <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="text-sm bg-gray-900 text-white rounded-md px-5 py-2 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait">
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Prospect'}
           </button>
         </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Email templates
+// ---------------------------------------------------------------------------
+function EmailTemplates({ prospect }: { prospect: ProspectPayload }) {
+  const name = prospect.business_name || '[Business]'
+  const contact = prospect.contact_name || 'there'
+  const [copied, setCopied] = useState<string | null>(null)
+
+  function copy(key: string, text: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
+  const templates = [
+    {
+      key: 'cold',
+      label: 'Cold Outreach',
+      subject: `Quick question for ${name}`,
+      body: `Hi ${contact},
+
+I came across ${name} and noticed you're running a busy operation. Quick question — when a new lead reaches out after hours or over the weekend, what's your current process for getting back to them?
+
+Most service businesses I talk to lose 2-3 jobs a week just from slow follow-up. We help fix that with simple AI automation — no tech headaches.
+
+Worth a 20-minute call to see if it's relevant to you?
+
+Best,
+[Your Name]
+ZenOps`,
+    },
+    {
+      key: 'followup1',
+      label: 'Follow-up 1',
+      subject: `Re: Quick question for ${name}`,
+      body: `Hi ${contact},
+
+Just wanted to bump this up in case it got buried.
+
+The short version: we help service businesses stop losing leads to slow response times. One of our clients went from booking 60% of their inbound leads to 85% in 30 days — just by fixing their missed-call process.
+
+Happy to share how we'd apply it to ${name} on a 20-min call. No pitch, just a look at your current setup.
+
+Best,
+[Your Name]`,
+    },
+    {
+      key: 'followup2',
+      label: 'Follow-up 2',
+      subject: `Last note — ${name}`,
+      body: `Hi ${contact},
+
+I'll keep this short — last follow-up from me.
+
+If leads, follow-up, or booking are ever a friction point for ${name}, we run a free 20-minute Front Office Audit that gives you a scored breakdown of where you're losing jobs.
+
+Zero cost, zero pitch. Just a clear picture of what to fix.
+
+If timing ever works: [calendar link]
+
+[Your Name]`,
+    },
+    {
+      key: 'audit_offer',
+      label: 'Audit Offer',
+      subject: `Free Front Office Audit — ${name}`,
+      body: `Hi ${contact},
+
+Based on our conversation, I'd like to offer ${name} a complimentary Front Office Audit.
+
+In 20 minutes we'll score your operation across 6 areas — missed calls, lead response speed, estimate follow-up, no-show recovery, stale leads, and pipeline visibility.
+
+You'll leave with a written scorecard and a clear #1 fix. No obligation.
+
+Book here: [calendar link]
+
+[Your Name]
+ZenOps`,
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {templates.map(t => (
+        <div key={t.key} className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+            <span className="text-xs font-semibold text-gray-700">{t.label}</span>
+            <button
+              onClick={() => copy(t.key, `Subject: ${t.subject}\n\n${t.body}`)}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              {copied === t.key ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <div className="px-3 py-2">
+            <p className="text-xs text-gray-400 mb-1">Subject: {t.subject}</p>
+            <pre className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">{t.body}</pre>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

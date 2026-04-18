@@ -26,7 +26,7 @@ function SignInForm() {
       return
     }
 
-    const next = searchParams.get('next') ?? '/ops/outreach'
+    const next = searchParams.get('next') ?? '/ops'
     router.push(next)
     router.refresh()
   }
