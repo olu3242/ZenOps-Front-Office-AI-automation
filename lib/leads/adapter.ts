@@ -32,6 +32,20 @@ export async function updateLeadStatus(
   return data[0] as Lead
 }
 
+export async function updateLead(
+  id: string,
+  payload: Partial<Omit<Lead, 'id' | 'created_at' | 'updated_at'>>,
+): Promise<Lead> {
+  const { data, error } = await supabase.from('leads').update(payload).eq('id', id).select().single()
+  if (error) throw new Error(`Failed to update lead: ${error.message}`)
+  return data as Lead
+}
+
+export async function deleteLead(id: string): Promise<void> {
+  const { error } = await supabase.from('leads').delete().eq('id', id)
+  if (error) throw new Error(`Failed to delete lead: ${error.message}`)
+}
+
 export async function createLead(
   payload: Omit<Lead, 'id' | 'created_at' | 'updated_at'>,
 ): Promise<Lead> {

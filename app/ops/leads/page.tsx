@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchLeads, updateLeadStatus, createLead } from '@/lib/leads/adapter'
+import { fetchLeads, updateLeadStatus, createLead, updateLead, deleteLead } from '@/lib/leads/adapter'
 import { supabase } from '@/lib/supabase'
 import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
 import { useToast } from '@/hooks/useToast'
@@ -33,22 +33,25 @@ const SOURCE_OPTIONS = ['', 'referral', 'google', 'facebook', 'instagram', 'cold
 // Add Lead modal
 // ---------------------------------------------------------------------------
 function AddLeadModal({
+  initial,
   saving,
   onSave,
   onClose,
 }: {
+  initial?: Lead
   saving: boolean
   onSave: (payload: Omit<Lead, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   onClose: () => void
 }) {
+  const isEdit = !!initial
   const [form, setForm] = useState({
-    business_name: '',
-    contact_name: '',
-    email: '',
-    phone: '',
-    source: '',
-    status: 'new' as LeadStatus,
-    notes: '',
+    business_name: initial?.business_name ?? '',
+    contact_name:  initial?.contact_name  ?? '',
+    email:         initial?.email         ?? '',
+    phone:         initial?.phone         ?? '',
+    source:        initial?.source        ?? '',
+    status:        initial?.status        ?? 'new' as LeadStatus,
+    notes:         initial?.notes         ?? '',
   })
   const [err, setErr] = useState<string | null>(null)
 
@@ -82,7 +85,7 @@ function AddLeadModal({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">Add Lead</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{isEdit ? 'Edit Lead' : 'Add Lead'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3">
@@ -139,7 +142,7 @@ function AddLeadModal({
             <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
             <button type="submit" disabled={saving}
               className="text-sm bg-gray-900 text-white rounded-md px-5 py-2 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait">
-              {saving ? 'Adding...' : 'Add Lead'}
+              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Lead'}
             </button>
           </div>
         </form>
@@ -161,9 +164,11 @@ export default function LeadsPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [showModal, setShowModal]   = useState(false)
+  const [showModal, setShowModal]     = useState(false)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [modalSaving, setModalSaving] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
+  const [deletingId, setDeletingId]   = useState<string | null>(null)
+  const [signingOut, setSigningOut]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -198,17 +203,38 @@ export default function LeadsPage() {
     })
   }, [updateStatus, addToast, load])
 
-  const handleCreate = useCallback(async (payload: Omit<Lead, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleSave = useCallback(async (payload: Omit<Lead, 'id' | 'created_at' | 'updated_at'>) => {
     setModalSaving(true)
     try {
-      const created = await createLead(payload)
-      setRecords(prev => [created, ...prev])
+      if (editingLead) {
+        const updated = await updateLead(editingLead.id, payload)
+        setRecords(prev => prev.map(r => r.id === editingLead.id ? updated : r))
+        addToast('Lead updated', 'success')
+      } else {
+        const created = await createLead(payload)
+        setRecords(prev => [created, ...prev])
+        addToast('Lead added', 'success')
+      }
       setShowModal(false)
-      addToast('Lead added', 'success')
+      setEditingLead(null)
     } catch {
-      addToast('Failed to add lead', 'error')
+      addToast(editingLead ? 'Failed to update lead' : 'Failed to add lead', 'error')
     } finally {
       setModalSaving(false)
+    }
+  }, [editingLead, setRecords, addToast])
+
+  const handleDelete = useCallback(async (id: string) => {
+    setDeletingId(id)
+    try {
+      await deleteLead(id)
+      setRecords(prev => prev.filter(r => r.id !== id))
+      setExpandedId(null)
+      addToast('Lead deleted', 'info')
+    } catch {
+      addToast('Failed to delete lead', 'error')
+    } finally {
+      setDeletingId(null)
     }
   }, [setRecords, addToast])
 
@@ -327,11 +353,18 @@ export default function LeadsPage() {
                       <td className="px-4 py-3 text-gray-500 tabular-nums">{r.created_at.split('T')[0]}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">{expandedId === r.id ? '▲' : '▼'}</td>
                     </tr>
-                    {expandedId === r.id && r.notes && (
+                    {expandedId === r.id && (
                       <tr className="bg-blue-50/20 border-b border-gray-100">
-                        <td colSpan={8} className="px-4 py-3">
-                          <p className="text-xs text-gray-400 mb-1">Notes</p>
-                          <p className="text-sm text-gray-700 whitespace-pre-line">{r.notes}</p>
+                        <td colSpan={8} className="px-4 py-3 space-y-2">
+                          {r.notes && <p className="text-sm text-gray-700 whitespace-pre-line">{r.notes}</p>}
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => { setEditingLead(r); setShowModal(true) }}
+                              className="text-xs text-blue-600 hover:underline">Edit</button>
+                            <button onClick={() => handleDelete(r.id)} disabled={deletingId === r.id}
+                              className="text-xs text-red-500 hover:underline disabled:opacity-50">
+                              {deletingId === r.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -348,9 +381,10 @@ export default function LeadsPage() {
 
       {showModal && (
         <AddLeadModal
+          initial={editingLead ?? undefined}
           saving={modalSaving}
-          onSave={handleCreate}
-          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          onClose={() => { setShowModal(false); setEditingLead(null) }}
         />
       )}
 

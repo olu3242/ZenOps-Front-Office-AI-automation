@@ -32,6 +32,20 @@ export async function updateTaskStatus(
   return data[0] as Task
 }
 
+export async function updateTask(
+  id: string,
+  payload: Partial<Omit<Task, 'id' | 'created_at' | 'updated_at'>>,
+): Promise<Task> {
+  const { data, error } = await supabase.from('tasks').update(payload).eq('id', id).select().single()
+  if (error) throw new Error(`Failed to update task: ${error.message}`)
+  return data as Task
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  const { error } = await supabase.from('tasks').delete().eq('id', id)
+  if (error) throw new Error(`Failed to delete task: ${error.message}`)
+}
+
 export async function createTask(
   payload: Omit<Task, 'id' | 'created_at' | 'updated_at'>,
 ): Promise<Task> {

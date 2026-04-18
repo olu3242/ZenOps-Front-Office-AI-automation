@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchTasks, updateTaskStatus, createTask } from '@/lib/tasks/adapter'
+import { fetchTasks, updateTaskStatus, createTask, updateTask, deleteTask } from '@/lib/tasks/adapter'
 import { supabase } from '@/lib/supabase'
 import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
 import { useToast } from '@/hooks/useToast'
@@ -29,20 +29,23 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 // Add Task modal
 // ---------------------------------------------------------------------------
 function AddTaskModal({
+  initial,
   saving,
   onSave,
   onClose,
 }: {
+  initial?: Task
   saving: boolean
   onSave: (payload: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   onClose: () => void
 }) {
+  const isEdit = !!initial
   const [form, setForm] = useState({
-    title: '',
-    description: '',
-    due_date: '',
-    assigned_to: '',
-    status: 'todo' as TaskStatus,
+    title:            initial?.title       ?? '',
+    description:      initial?.description ?? '',
+    due_date:         initial?.due_date    ?? '',
+    assigned_to:      initial?.assigned_to ?? '',
+    status:           initial?.status      ?? 'todo' as TaskStatus,
     related_audit_id: null as string | null,
   })
   const [err, setErr] = useState<string | null>(null)
@@ -76,7 +79,7 @@ function AddTaskModal({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">Add Task</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{isEdit ? 'Edit Task' : 'Add Task'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3">
@@ -117,7 +120,7 @@ function AddTaskModal({
             <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
             <button type="submit" disabled={saving}
               className="text-sm bg-gray-900 text-white rounded-md px-5 py-2 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait">
-              {saving ? 'Adding...' : 'Add Task'}
+              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Task'}
             </button>
           </div>
         </form>
@@ -139,7 +142,9 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [expandedId, setExpandedId]   = useState<string | null>(null)
   const [showModal, setShowModal]     = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [modalSaving, setModalSaving] = useState(false)
+  const [deletingId, setDeletingId]   = useState<string | null>(null)
   const [signingOut, setSigningOut]   = useState(false)
 
   const load = useCallback(async () => {
@@ -175,17 +180,38 @@ export default function TasksPage() {
     })
   }, [updateStatus, addToast, load])
 
-  const handleCreate = useCallback(async (payload: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleSave = useCallback(async (payload: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => {
     setModalSaving(true)
     try {
-      const created = await createTask(payload)
-      setRecords(prev => [created, ...prev])
+      if (editingTask) {
+        const updated = await updateTask(editingTask.id, payload)
+        setRecords(prev => prev.map(r => r.id === editingTask.id ? updated : r))
+        addToast('Task updated', 'success')
+      } else {
+        const created = await createTask(payload)
+        setRecords(prev => [created, ...prev])
+        addToast('Task added', 'success')
+      }
       setShowModal(false)
-      addToast('Task added', 'success')
+      setEditingTask(null)
     } catch {
-      addToast('Failed to add task', 'error')
+      addToast(editingTask ? 'Failed to update task' : 'Failed to add task', 'error')
     } finally {
       setModalSaving(false)
+    }
+  }, [editingTask, setRecords, addToast])
+
+  const handleDelete = useCallback(async (id: string) => {
+    setDeletingId(id)
+    try {
+      await deleteTask(id)
+      setRecords(prev => prev.filter(r => r.id !== id))
+      setExpandedId(null)
+      addToast('Task deleted', 'info')
+    } catch {
+      addToast('Failed to delete task', 'error')
+    } finally {
+      setDeletingId(null)
     }
   }, [setRecords, addToast])
 
@@ -294,11 +320,18 @@ export default function TasksPage() {
                       <td className="px-4 py-3 text-gray-500 tabular-nums">{r.created_at.split('T')[0]}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">{expandedId === r.id ? '▲' : '▼'}</td>
                     </tr>
-                    {expandedId === r.id && r.description && (
+                    {expandedId === r.id && (
                       <tr className="bg-blue-50/20 border-b border-gray-100">
-                        <td colSpan={6} className="px-4 py-3">
-                          <p className="text-xs text-gray-400 mb-1">Description</p>
-                          <p className="text-sm text-gray-700 whitespace-pre-line">{r.description}</p>
+                        <td colSpan={6} className="px-4 py-3 space-y-2">
+                          {r.description && <p className="text-sm text-gray-700 whitespace-pre-line">{r.description}</p>}
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => { setEditingTask(r); setShowModal(true) }}
+                              className="text-xs text-blue-600 hover:underline">Edit</button>
+                            <button onClick={() => handleDelete(r.id)} disabled={deletingId === r.id}
+                              className="text-xs text-red-500 hover:underline disabled:opacity-50">
+                              {deletingId === r.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -320,9 +353,10 @@ export default function TasksPage() {
 
       {showModal && (
         <AddTaskModal
+          initial={editingTask ?? undefined}
           saving={modalSaving}
-          onSave={handleCreate}
-          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          onClose={() => { setShowModal(false); setEditingTask(null) }}
         />
       )}
 
