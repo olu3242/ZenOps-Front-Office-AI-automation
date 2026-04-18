@@ -78,6 +78,7 @@ export default function OutreachPage() {
   const [error, setError]                   = useState<string | null>(null)
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus]     = useState('')
+  const [search, setSearch]               = useState('')
   const [savingIds, setSavingIds]           = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId]         = useState<string | null>(null)
   const [showDrawer, setShowDrawer]         = useState(false)
@@ -154,6 +155,10 @@ export default function OutreachPage() {
   const openEdit   = (r: OutreachRecord) => { setEditingRecord(r); setShowDrawer(true) }
   const closeDrawer = () => { setShowDrawer(false); setEditingRecord(null) }
 
+  const visible = search
+    ? records.filter(r => (r.company_name + (r.contact_name ?? '') + (r.city ?? '')).toLowerCase().includes(search.toLowerCase()))
+    : records
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -181,6 +186,8 @@ export default function OutreachPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3 mb-5">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select
             value={filterCategory}
             onChange={e => setFilterCategory(e.target.value)}
@@ -203,9 +210,9 @@ export default function OutreachPage() {
             ))}
           </select>
 
-          {(filterCategory || filterStatus) && (
+          {(filterCategory || filterStatus || search) && (
             <button
-              onClick={() => { setFilterCategory(''); setFilterStatus('') }}
+              onClick={() => { setFilterCategory(''); setFilterStatus(''); setSearch('') }}
               className="text-sm text-gray-400 hover:text-gray-600 underline"
             >
               Clear filters
@@ -214,7 +221,7 @@ export default function OutreachPage() {
 
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-gray-400">
-              {!loading && `${records.length} record${records.length !== 1 ? 's' : ''}`}
+              {!loading && `${visible.length} record${visible.length !== 1 ? 's' : ''}`}
             </span>
             <button
               onClick={openCreate}
@@ -235,14 +242,14 @@ export default function OutreachPage() {
             <button onClick={load} className="mt-3 text-sm text-blue-600 hover:underline">Retry</button>
           </div>
         )}
-        {!loading && !error && records.length === 0 && (
+        {!loading && !error && visible.length === 0 && (
           <div className="py-16 text-center">
             <p className="text-sm text-gray-400">
-              {filterCategory || filterStatus ? 'No records match your filters.' : 'No prospects yet.'}
+              {records.length === 0 ? 'No prospects yet.' : 'No records match your filters.'}
             </p>
-            {filterCategory || filterStatus ? (
+            {(filterCategory || filterStatus || search) ? (
               <button
-                onClick={() => { setFilterCategory(''); setFilterStatus('') }}
+                onClick={() => { setFilterCategory(''); setFilterStatus(''); setSearch('') }}
                 className="mt-2 text-sm text-blue-600 hover:underline"
               >
                 Clear filters
@@ -256,7 +263,7 @@ export default function OutreachPage() {
         )}
 
         {/* Table */}
-        {!loading && !error && records.length > 0 && (
+        {!loading && !error && visible.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -270,7 +277,7 @@ export default function OutreachPage() {
                 </tr>
               </thead>
               <tbody>
-                {records.map((r, i) => (
+                {visible.map((r, i) => (
                   <Fragment key={r.id}>
                     <tr
                       onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
@@ -330,7 +337,7 @@ export default function OutreachPage() {
               </tbody>
             </table>
             <div className="px-4 py-2.5 border-t border-gray-100 text-xs text-gray-400">
-              {records.length} record{records.length !== 1 ? 's' : ''}
+              {visible.length} record{visible.length !== 1 ? 's' : ''}
             </div>
           </div>
         )}

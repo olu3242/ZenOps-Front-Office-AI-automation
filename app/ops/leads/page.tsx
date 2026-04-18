@@ -159,6 +159,7 @@ export default function LeadsPage() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState('')
+  const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showModal, setShowModal]   = useState(false)
   const [modalSaving, setModalSaving] = useState(false)
@@ -211,7 +212,14 @@ export default function LeadsPage() {
     }
   }, [setRecords, addToast])
 
-  const visible = filterStatus ? records.filter(r => r.status === filterStatus) : records
+  const visible = records.filter(r => {
+    if (filterStatus && r.status !== filterStatus) return false
+    if (search) {
+      const q = search.toLowerCase()
+      return (r.business_name + (r.contact_name ?? '') + (r.email ?? '')).toLowerCase().includes(q)
+    }
+    return true
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -235,13 +243,15 @@ export default function LeadsPage() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex flex-wrap items-center gap-3 mb-5">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">All Statuses</option>
             {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>
-          {filterStatus && (
-            <button onClick={() => setFilterStatus('')} className="text-sm text-gray-400 hover:text-gray-600 underline">Clear</button>
+          {(filterStatus || search) && (
+            <button onClick={() => { setFilterStatus(''); setSearch('') }} className="text-sm text-gray-400 hover:text-gray-600 underline">Clear</button>
           )}
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-gray-400">{!loading && `${visible.length} lead${visible.length !== 1 ? 's' : ''}`}</span>
