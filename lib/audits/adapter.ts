@@ -5,6 +5,34 @@
 
 import { supabase } from '@/lib/supabase'
 import type { AuditRecord, AuditRating, AuditPackage, AuditStatus, AuditStatusHistoryEntry } from './types'
+import type { PagedResult } from '@/lib/pagination'
+import { PAGE_SIZE } from '@/lib/pagination'
+
+export async function fetchAuditsPaged(opts: {
+  limit?: number
+  cursor?: string
+  search?: string
+  status?: string
+}): Promise<PagedResult<AuditRecord>> {
+  const limit = opts.limit ?? PAGE_SIZE
+  let q = supabase.from('front_office_audits').select('*').order('created_at', { ascending: false }).limit(limit)
+  if (opts.cursor) q = q.lt('created_at', opts.cursor)
+  if (opts.status) q = q.eq('status', opts.status)
+  if (opts.search) {
+    const s = `%${opts.search}%`
+    q = q.or(`business_name.ilike.${s},contact_name.ilike.${s},email.ilike.${s}`)
+  }
+  const { data, error } = await q
+  if (error) throw new Error(`Failed to fetch audits: ${error.message}`)
+  const rows = (data ?? []) as AuditRecord[]
+  return { data: rows, nextCursor: rows.length === limit ? rows[rows.length - 1].created_at : null, hasMore: rows.length === limit }
+}
+
+export async function fetchAuditById(id: string): Promise<AuditRecord> {
+  const { data, error } = await supabase.from('front_office_audits').select('*').eq('id', id).single()
+  if (error) throw new Error(`Failed to fetch audit: ${error.message}`)
+  return data as AuditRecord
+}
 
 export interface AuditResultsPayload {
   score_missed_call?: AuditRating | null

@@ -6,6 +6,28 @@
 
 import { supabase } from '@/lib/supabase'
 import type { OutreachRecord, OutreachCategory, OutreachStatus } from './types'
+import type { PagedResult } from '@/lib/pagination'
+import { PAGE_SIZE } from '@/lib/pagination'
+
+export async function fetchOutreachPaged(opts: {
+  limit?: number
+  cursor?: string
+  search?: string
+  status?: string
+}): Promise<PagedResult<OutreachRecord>> {
+  const limit = opts.limit ?? PAGE_SIZE
+  let q = supabase.from('outreach_records').select('*').order('created_at', { ascending: false }).limit(limit)
+  if (opts.cursor) q = q.lt('created_at', opts.cursor)
+  if (opts.status) q = q.eq('status', opts.status)
+  if (opts.search) {
+    const s = `%${opts.search}%`
+    q = q.or(`business_name.ilike.${s},contact_name.ilike.${s},city.ilike.${s}`)
+  }
+  const { data, error } = await q
+  if (error) throw new Error(`Failed to fetch outreach: ${error.message}`)
+  const rows = ((data ?? []) as DBRow[]).map(mapRow)
+  return { data: rows, nextCursor: rows.length === limit ? (data as DBRow[])[rows.length - 1].created_at : null, hasMore: rows.length === limit }
+}
 
 // ---------------------------------------------------------------------------
 // Row type returned by Supabase (mirrors DB columns)

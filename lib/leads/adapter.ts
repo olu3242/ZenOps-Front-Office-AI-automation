@@ -1,5 +1,27 @@
 import { supabase } from '@/lib/supabase'
 import type { Lead, LeadStatus, LeadStatusHistoryEntry } from './types'
+import type { PagedResult } from '@/lib/pagination'
+import { PAGE_SIZE } from '@/lib/pagination'
+
+export async function fetchLeadsPaged(opts: {
+  limit?: number
+  cursor?: string
+  search?: string
+  status?: string
+}): Promise<PagedResult<Lead>> {
+  const limit = opts.limit ?? PAGE_SIZE
+  let q = supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(limit)
+  if (opts.cursor) q = q.lt('created_at', opts.cursor)
+  if (opts.status) q = q.eq('status', opts.status)
+  if (opts.search) {
+    const s = `%${opts.search}%`
+    q = q.or(`business_name.ilike.${s},contact_name.ilike.${s},email.ilike.${s}`)
+  }
+  const { data, error } = await q
+  if (error) throw new Error(`Failed to fetch leads: ${error.message}`)
+  const rows = (data ?? []) as Lead[]
+  return { data: rows, nextCursor: rows.length === limit ? rows[rows.length - 1].created_at : null, hasMore: rows.length === limit }
+}
 
 export async function fetchLeads(): Promise<Lead[]> {
   const { data, error } = await supabase

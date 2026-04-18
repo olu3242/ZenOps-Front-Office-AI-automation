@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchAuditRecords, updateAuditStatus, updateAuditResults, type AuditResultsPayload } from '@/lib/audits/adapter'
+import { fetchAuditRecords, fetchAuditsPaged, updateAuditStatus, updateAuditResults, type AuditResultsPayload } from '@/lib/audits/adapter'
 import { supabase } from '@/lib/supabase'
 import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
 import { useToast } from '@/hooks/useToast'
@@ -52,18 +52,36 @@ export default function AuditsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
+  const [nextCursor, setNextCursor]   = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [filterStatus, setFilterStatus] = useState('')
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      setRecords(await fetchAuditRecords())
+      const result = await fetchAuditsPaged({})
+      setRecords(result.data)
+      setNextCursor(result.nextCursor)
     } catch {
       setError('Failed to load audit records. Please try again.')
     } finally {
       setLoading(false)
     }
   }, [setRecords])
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const result = await fetchAuditsPaged({ cursor: nextCursor })
+      setRecords(prev => [...prev, ...result.data])
+      setNextCursor(result.nextCursor)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [nextCursor, loadingMore, setRecords])
 
   useEffect(() => { load() }, [load])
 
@@ -164,6 +182,13 @@ export default function AuditsPage() {
         )}
 
         {!loading && !error && records.length > 0 && (
+          <>
+          <div className="flex items-center gap-3 mb-4">
+            <a href={`/api/export/audits?${new URLSearchParams({ ...(filterStatus ? { status: filterStatus } : {}), ...(search ? { search } : {}) })}`}
+              className="ml-auto text-xs border border-gray-300 text-gray-600 rounded-md px-3 py-1.5 hover:border-gray-400 transition-colors">
+              Export CSV
+            </a>
+          </div>
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -229,6 +254,9 @@ export default function AuditsPage() {
                     {expandedId === r.id && (
                       <tr className="bg-blue-50/20 border-b border-gray-100">
                         <td colSpan={8} className="px-4 py-5 space-y-6">
+                          <div className="flex justify-end mb-2">
+                            <a href={`/ops/audits/${r.id}`} className="text-xs text-blue-600 hover:underline">View Full Detail →</a>
+                          </div>
                           <DetailPanel record={r} />
                           <ScoringDrawer record={r} onSave={handleResultsSave} />
                         </td>
@@ -238,10 +266,17 @@ export default function AuditsPage() {
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2.5 border-t border-gray-100 text-xs text-gray-400">
-              {records.length} submission{records.length !== 1 ? 's' : ''}
+            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400">{records.length} submission{records.length !== 1 ? 's' : ''}</span>
+              {nextCursor && (
+                <button onClick={loadMore} disabled={loadingMore}
+                  className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                  {loadingMore ? 'Loading...' : 'Load more'}
+                </button>
+              )}
             </div>
           </div>
+          </>
         )}
       </div>
 

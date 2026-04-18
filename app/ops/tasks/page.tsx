@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchTasks, updateTaskStatus, createTask, updateTask, deleteTask } from '@/lib/tasks/adapter'
+import { fetchTasks, fetchTasksPaged, updateTaskStatus, createTask, updateTask, deleteTask } from '@/lib/tasks/adapter'
 import { supabase } from '@/lib/supabase'
 import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
 import { useToast } from '@/hooks/useToast'
@@ -147,18 +147,34 @@ export default function TasksPage() {
   const [modalSaving, setModalSaving] = useState(false)
   const [deletingId, setDeletingId]   = useState<string | null>(null)
   const [signingOut, setSigningOut]   = useState(false)
+  const [nextCursor, setNextCursor]   = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      setRecords(await fetchTasks())
+      const result = await fetchTasksPaged({})
+      setRecords(result.data)
+      setNextCursor(result.nextCursor)
     } catch {
       setError('Failed to load tasks. Please try again.')
     } finally {
       setLoading(false)
     }
   }, [setRecords])
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const result = await fetchTasksPaged({ cursor: nextCursor })
+      setRecords(prev => [...prev, ...result.data])
+      setNextCursor(result.nextCursor)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [nextCursor, loadingMore, setRecords])
 
   useEffect(() => { load() }, [load])
 
@@ -259,6 +275,10 @@ export default function TasksPage() {
           )}
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-gray-400">{!loading && `${visible.length} task${visible.length !== 1 ? 's' : ''}`}</span>
+            <a href={`/api/export/tasks?${new URLSearchParams({ ...(filterStatus ? { status: filterStatus } : {}), ...(search ? { search } : {}) })}`}
+              className="text-xs border border-gray-300 text-gray-600 rounded-md px-3 py-1.5 hover:border-gray-400 transition-colors">
+              Export CSV
+            </a>
             <button onClick={() => setShowModal(true)}
               className="text-sm bg-gray-900 text-white rounded-md px-4 py-1.5 font-medium hover:bg-gray-700 transition-colors">
               + Add Task
@@ -346,12 +366,18 @@ export default function TasksPage() {
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2.5 border-t border-gray-100 text-xs text-gray-400">
-              {visible.length} task{visible.length !== 1 ? 's' : ''}
-              {visible.filter(r => overdue(r)).length > 0 && (
-                <span className="ml-2 text-red-500">
-                  · {visible.filter(r => overdue(r)).length} overdue
-                </span>
+            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400">
+                {visible.length} task{visible.length !== 1 ? 's' : ''}
+                {visible.filter(r => overdue(r)).length > 0 && (
+                  <span className="ml-2 text-red-500">· {visible.filter(r => overdue(r)).length} overdue</span>
+                )}
+              </span>
+              {nextCursor && (
+                <button onClick={loadMore} disabled={loadingMore}
+                  className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                  {loadingMore ? 'Loading...' : 'Load more'}
+                </button>
               )}
             </div>
           </div>
