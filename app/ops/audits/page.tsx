@@ -2,12 +2,12 @@
 
 import { useEffect, useCallback, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchAuditRecords, updateAuditStatus } from '@/lib/audits/adapter'
+import { fetchAuditRecords, updateAuditStatus, updateAuditResults, type AuditResultsPayload } from '@/lib/audits/adapter'
 import { supabase } from '@/lib/supabase'
 import { useOptimisticStatus } from '@/hooks/useOptimisticStatus'
 import { useToast } from '@/hooks/useToast'
 import { ToastContainer } from '@/components/ui/Toast'
-import type { AuditRecord, AuditStatus } from '@/lib/audits/types'
+import type { AuditRecord, AuditRating, AuditPackage, AuditStatus } from '@/lib/audits/types'
 
 const ALL_STATUSES: AuditStatus[] = [
   'submitted', 'scheduled', 'completed', 'no_show',
@@ -97,6 +97,19 @@ export default function AuditsPage() {
       onError: () => addToast('Update failed, reverted', 'error'),
     })
   }, [updateStatus, addToast, load])
+
+  const handleResultsSave = useCallback(async (
+    id: string,
+    payload: AuditResultsPayload,
+  ) => {
+    try {
+      const updated = await updateAuditResults(id, payload)
+      setRecords((prev) => prev.map((r) => r.id === id ? updated : r))
+      addToast('Results saved', 'success')
+    } catch {
+      addToast('Failed to save results', 'error')
+    }
+  }, [setRecords, addToast])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -215,8 +228,9 @@ export default function AuditsPage() {
                     </tr>
                     {expandedId === r.id && (
                       <tr className="bg-blue-50/20 border-b border-gray-100">
-                        <td colSpan={8} className="px-4 py-5">
+                        <td colSpan={8} className="px-4 py-5 space-y-6">
                           <DetailPanel record={r} />
+                          <ScoringDrawer record={r} onSave={handleResultsSave} />
                         </td>
                       </tr>
                     )}
@@ -232,6 +246,165 @@ export default function AuditsPage() {
       </div>
 
       <ToastContainer toasts={toasts} dismiss={dismiss} />
+    </div>
+  )
+}
+
+const AUDIT_AREAS: { key: keyof AuditRecord; label: string }[] = [
+  { key: 'score_missed_call',        label: 'Missed Call Process' },
+  { key: 'score_lead_response',      label: 'Lead Response Speed' },
+  { key: 'score_estimate_followup',  label: 'Estimate Follow-Up' },
+  { key: 'score_noshow',             label: 'No-Show Recovery' },
+  { key: 'score_stale_recovery',     label: 'Stale Lead Revival' },
+  { key: 'score_pipeline_visibility', label: 'Pipeline Visibility' },
+]
+
+const PACKAGE_OPTIONS: [AuditPackage | '', string][] = [
+  ['',             'None'],
+  ['launch_sprint', 'Launch Sprint'],
+  ['growth_system', 'Growth System'],
+  ['ai_os',         'AI OS'],
+  ['not_a_fit',     'Not a Fit'],
+]
+
+const SCORE_COLORS: Record<AuditRating, string> = {
+  red:    'bg-red-100 text-red-700 border-red-200',
+  yellow: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+  green:  'bg-green-100 text-green-700 border-green-200',
+}
+
+function ScoringDrawer({
+  record,
+  onSave,
+}: {
+  record: AuditRecord
+  onSave: (id: string, payload: AuditResultsPayload) => Promise<void>
+}) {
+  const [scores, setScores] = useState<Record<string, AuditRating | ''>>(() => ({
+    score_missed_call:         record.score_missed_call         ?? '',
+    score_lead_response:       record.score_lead_response       ?? '',
+    score_estimate_followup:   record.score_estimate_followup   ?? '',
+    score_noshow:              record.score_noshow              ?? '',
+    score_stale_recovery:      record.score_stale_recovery      ?? '',
+    score_pipeline_visibility: record.score_pipeline_visibility ?? '',
+  }))
+  const [findings, setFindings] = useState({
+    top_finding_1: record.top_finding_1 ?? '',
+    top_finding_2: record.top_finding_2 ?? '',
+    top_finding_3: record.top_finding_3 ?? '',
+  })
+  const [auditorNotes, setAuditorNotes]     = useState(record.auditor_notes ?? '')
+  const [recPackage, setRecPackage]         = useState<AuditPackage | ''>(record.recommended_package ?? '')
+  const [proposalSent, setProposalSent]     = useState(record.proposal_sent ?? false)
+  const [saving, setSaving]                 = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    await onSave(record.id, {
+      score_missed_call:         scores.score_missed_call         || null,
+      score_lead_response:       scores.score_lead_response       || null,
+      score_estimate_followup:   scores.score_estimate_followup   || null,
+      score_noshow:              scores.score_noshow              || null,
+      score_stale_recovery:      scores.score_stale_recovery      || null,
+      score_pipeline_visibility: scores.score_pipeline_visibility || null,
+      top_finding_1:   findings.top_finding_1   || null,
+      top_finding_2:   findings.top_finding_2   || null,
+      top_finding_3:   findings.top_finding_3   || null,
+      auditor_notes:   auditorNotes             || null,
+      recommended_package: recPackage           || null,
+      proposal_sent:   proposalSent,
+    })
+    setSaving(false)
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white p-5 space-y-5">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Audit Scores</h3>
+
+      {/* 6-area scores */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {AUDIT_AREAS.map(({ key, label }) => {
+          const val = scores[key] as AuditRating | ''
+          return (
+            <div key={key}>
+              <p className="text-xs text-gray-500 mb-1">{label}</p>
+              <div className="flex gap-1.5">
+                {(['red', 'yellow', 'green'] as AuditRating[]).map((rating) => (
+                  <button
+                    key={rating}
+                    onClick={() => setScores((s) => ({ ...s, [key]: val === rating ? '' : rating }))}
+                    className={`px-2.5 py-0.5 rounded text-xs font-medium border transition-opacity ${
+                      SCORE_COLORS[rating]
+                    } ${val === rating ? 'opacity-100 ring-2 ring-offset-1 ring-current' : 'opacity-40 hover:opacity-70'}`}
+                  >
+                    {rating.charAt(0).toUpperCase() + rating.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Top findings */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        {(['top_finding_1', 'top_finding_2', 'top_finding_3'] as const).map((k, i) => (
+          <div key={k}>
+            <label className="block text-xs text-gray-500 mb-1">Top Finding {i + 1}</label>
+            <input
+              type="text"
+              value={findings[k]}
+              onChange={(e) => setFindings((f) => ({ ...f, [k]: e.target.value }))}
+              placeholder={`Finding ${i + 1}…`}
+              className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Auditor notes */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Auditor Notes</label>
+        <textarea
+          rows={3}
+          value={auditorNotes}
+          onChange={(e) => setAuditorNotes(e.target.value)}
+          placeholder="Internal notes for this audit…"
+          className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+        />
+      </div>
+
+      {/* Package + proposal */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Recommended Package</label>
+          <select
+            value={recPackage}
+            onChange={(e) => setRecPackage(e.target.value as AuditPackage | '')}
+            className="border border-gray-200 rounded px-2.5 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+          >
+            {PACKAGE_OPTIONS.map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={proposalSent}
+            onChange={(e) => setProposalSent(e.target.checked)}
+            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+          />
+          Proposal sent
+        </label>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="ml-auto text-xs bg-gray-900 text-white rounded px-4 py-1.5 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
+        >
+          {saving ? 'Saving…' : 'Save Results'}
+        </button>
+      </div>
     </div>
   )
 }

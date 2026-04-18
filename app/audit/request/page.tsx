@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { submitAuditRequest } from '@/lib/audits/adapter'
 
 const BLANK: Record<string, string> = {
@@ -23,8 +24,9 @@ const BLANK: Record<string, string> = {
 }
 
 export default function AuditRequestPage() {
+  const router = useRouter()
   const [form, setForm] = useState<Record<string, string>>(BLANK)
-  const [pageState, setPageState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [pageState, setPageState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   function set(name: string, value: string) {
@@ -37,24 +39,11 @@ export default function AuditRequestPage() {
     setErrorMsg(null)
     try {
       await submitAuditRequest(form)
-      setPageState('success')
+      router.push('/audit/book')
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       setPageState('error')
     }
-  }
-
-  if (pageState === 'success') {
-    return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-sm px-4">
-          <h1 className="text-xl font-semibold text-gray-900">Request received</h1>
-          <p className="text-sm text-gray-500 mt-2">
-            We’ll be in touch within 1 business day to schedule your audit call.
-          </p>
-        </div>
-      </main>
-    )
   }
 
   return (
@@ -64,7 +53,7 @@ export default function AuditRequestPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Request a Front Office Audit</h1>
           <p className="text-sm text-gray-500 mt-2">
             Tell us about your business and how your front office works today.
-            We’ll identify your biggest revenue leaks.
+            We will identify your biggest revenue leaks.
           </p>
         </div>
 
@@ -90,7 +79,7 @@ export default function AuditRequestPage() {
                 name="best_contact_method"
                 value={form.best_contact_method}
                 set={set}
-                options={[['', 'Select…'], ['email', 'Email'], ['phone', 'Phone call'], ['text', 'Text message']]}
+                options={[['', 'Select...'], ['email', 'Email'], ['phone', 'Phone call'], ['text', 'Text message']]}
               />
             </div>
           </section>
@@ -131,7 +120,7 @@ export default function AuditRequestPage() {
             disabled={pageState === 'loading'}
             className="w-full bg-gray-900 text-white rounded-md py-2.5 text-sm font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
           >
-            {pageState === 'loading' ? 'Submitting…' : 'Submit Audit Request'}
+            {pageState === 'loading' ? 'Submitting...' : 'Submit Audit Request'}
           </button>
 
         </form>
@@ -141,7 +130,7 @@ export default function AuditRequestPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Internal field helpers — use set(name, value) to avoid React event union types
+// Internal field helpers
 // ---------------------------------------------------------------------------
 
 function F({

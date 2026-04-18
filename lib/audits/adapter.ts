@@ -4,7 +4,22 @@
  */
 
 import { supabase } from '@/lib/supabase'
-import type { AuditRecord, AuditStatus, AuditStatusHistoryEntry } from './types'
+import type { AuditRecord, AuditRating, AuditPackage, AuditStatus, AuditStatusHistoryEntry } from './types'
+
+export interface AuditResultsPayload {
+  score_missed_call?: AuditRating | null
+  score_lead_response?: AuditRating | null
+  score_estimate_followup?: AuditRating | null
+  score_noshow?: AuditRating | null
+  score_stale_recovery?: AuditRating | null
+  score_pipeline_visibility?: AuditRating | null
+  top_finding_1?: string | null
+  top_finding_2?: string | null
+  top_finding_3?: string | null
+  auditor_notes?: string | null
+  recommended_package?: AuditPackage | null
+  proposal_sent?: boolean
+}
 
 export async function submitAuditRequest(data: Record<string, string>): Promise<void> {
   // Strip empty strings so optional fields store null, not empty string
@@ -52,6 +67,20 @@ export async function updateAuditStatus(
   if (error) throw new Error(`Failed to update audit status: ${error.message}`)
   if (!data || data.length === 0) throw new Error('CONCURRENCY_CONFLICT')
 
+  return data[0] as AuditRecord
+}
+
+export async function updateAuditResults(
+  id: string,
+  payload: AuditResultsPayload,
+): Promise<AuditRecord> {
+  const { data, error } = await supabase
+    .from('front_office_audits')
+    .update(payload)
+    .eq('id', id)
+    .select()
+  if (error) throw new Error(`Failed to update audit results: ${error.message}`)
+  if (!data || data.length === 0) throw new Error('Record not found')
   return data[0] as AuditRecord
 }
 

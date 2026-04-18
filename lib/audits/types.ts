@@ -45,6 +45,18 @@ export interface AuditRecord {
   key_revenue_leaks: string | null
   recommended_starting_fix: string | null
   recommended_package: AuditPackage | null
+  // Per-area scores from migration 000006
+  score_missed_call: AuditRating | null
+  score_lead_response: AuditRating | null
+  score_estimate_followup: AuditRating | null
+  score_noshow: AuditRating | null
+  score_stale_recovery: AuditRating | null
+  score_pipeline_visibility: AuditRating | null
+  top_finding_1: string | null
+  top_finding_2: string | null
+  top_finding_3: string | null
+  auditor_notes: string | null
+  proposal_sent: boolean
   status: AuditStatus
   created_at: string
   updated_at: string  // required for concurrency-safe updates
