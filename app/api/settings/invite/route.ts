@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { sendEmail } from '@/lib/email/sender'
+import { inviteEmail } from '@/lib/email/templates'
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies()
@@ -45,6 +47,14 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invite?token=${inv.token}`
+
+  const { data: org } = await supabase.from('organizations').select('name').eq('id', orgId).single()
+  const inviterName = user.user_metadata?.name ?? user.email ?? 'A teammate'
+
+  try {
+    const tpl = inviteEmail({ inviterName, orgName: org?.name ?? 'ZenOps', inviteUrl, role })
+    await sendEmail({ to: email.toLowerCase(), subject: tpl.subject, html: tpl.html })
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({ token: inv.token, invite_url: inviteUrl })
 }
