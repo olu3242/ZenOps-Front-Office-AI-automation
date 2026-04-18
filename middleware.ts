@@ -46,14 +46,33 @@ export async function middleware(request: NextRequest) {
 
   if (!user) {
     const signInUrl = new URL('/auth/signin', request.url)
-    // Preserve the intended destination so we can redirect after login later
     signInUrl.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(signInUrl)
+  }
+
+  const path = request.nextUrl.pathname
+  const isOpsRoute = path.startsWith('/ops') || path.startsWith('/automation')
+
+  if (isOpsRoute) {
+    const { data: subData } = await supabase
+      .from('subscriptions')
+      .select('status, trial_ends_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (subData) {
+      const expired = subData.status === 'trialing' && subData.trial_ends_at && new Date(subData.trial_ends_at) < new Date()
+      const inactive = ['canceled', 'unpaid'].includes(subData.status)
+      if ((expired || inactive) && !path.startsWith('/billing')) {
+        return NextResponse.redirect(new URL('/billing', request.url))
+      }
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/ops/:path*', '/automation/:path*'],
+  matcher: ['/ops/:path*', '/automation/:path*', '/billing/:path*'],
 }

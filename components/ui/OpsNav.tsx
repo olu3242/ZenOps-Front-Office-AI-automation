@@ -5,13 +5,14 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 const NAV_LINKS = [
-  { label: 'Dashboard',   href: '/ops' },
-  { label: 'Outreach',    href: '/ops/outreach' },
-  { label: 'Audits',      href: '/ops/audits' },
+  { label: 'Dashboard',     href: '/ops' },
+  { label: 'Outreach',      href: '/ops/outreach' },
+  { label: 'Audits',        href: '/ops/audits' },
   { label: 'Leads',       href: '/ops/leads' },
   { label: 'Tasks',       href: '/ops/tasks' },
   { label: 'Automation',  href: '/automation' },
   { label: 'Notifications', href: '/ops/notifications' },
+  { label: 'Billing',       href: '/billing' },
 ]
 
 export function OpsNav({ title, subtitle }: { title: string; subtitle?: string }) {
