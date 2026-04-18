@@ -216,11 +216,12 @@ export default function OpsDashboard() {
             </div>
 
             {/* Quick links */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { label: 'View Outreach',   href: '/ops/outreach' },
-                { label: 'View Audits',     href: '/ops/audits' },
-                { label: 'View Leads',      href: '/ops/leads' },
+                { label: 'View Outreach',    href: '/ops/outreach' },
+                { label: 'View Audits',      href: '/ops/audits' },
+                { label: 'View Leads',       href: '/ops/leads' },
+                { label: 'Notifications',    href: '/ops/notifications' },
                 { label: 'Automation Rules', href: '/automation' },
               ].map(({ label, href }) => (
                 <a key={href} href={href}

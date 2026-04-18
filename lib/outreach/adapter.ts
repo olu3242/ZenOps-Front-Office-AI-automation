@@ -169,3 +169,8 @@ export async function updateOutreachRecord(
   if (error) throw new Error(`Failed to update record: ${error.message}`)
   return mapRow(data as DBRow)
 }
+
+export async function deleteOutreachRecord(id: string): Promise<void> {
+  const { error } = await supabase.from('outreach_records').delete().eq('id', id)
+  if (error) throw new Error(`Failed to delete record: ${error.message}`)
+}

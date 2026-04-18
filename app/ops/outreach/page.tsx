@@ -7,6 +7,7 @@ import {
   updateOutreachStatus,
   createOutreachRecord,
   updateOutreachRecord,
+  deleteOutreachRecord,
   type ProspectPayload,
 } from '@/lib/outreach/adapter'
 import { supabase } from '@/lib/supabase'
@@ -84,6 +85,7 @@ export default function OutreachPage() {
   const [showDrawer, setShowDrawer]         = useState(false)
   const [editingRecord, setEditingRecord]   = useState<OutreachRecord | null>(null)
   const [drawerSaving, setDrawerSaving]     = useState(false)
+  const [deletingId, setDeletingId]         = useState<string | null>(null)
   const [signingOut, setSigningOut]         = useState(false)
 
   const load = useCallback(async () => {
@@ -154,6 +156,20 @@ export default function OutreachPage() {
   const openCreate = () => { setEditingRecord(null); setShowDrawer(true) }
   const openEdit   = (r: OutreachRecord) => { setEditingRecord(r); setShowDrawer(true) }
   const closeDrawer = () => { setShowDrawer(false); setEditingRecord(null) }
+
+  const handleDelete = useCallback(async (id: string) => {
+    setDeletingId(id)
+    try {
+      await deleteOutreachRecord(id)
+      setRecords(prev => prev.filter(r => r.id !== id))
+      setExpandedId(null)
+      addToast('Prospect deleted', 'info')
+    } catch {
+      addToast('Failed to delete prospect', 'error')
+    } finally {
+      setDeletingId(null)
+    }
+  }, [setRecords, addToast])
 
   const visible = search
     ? records.filter(r => (r.company_name + (r.contact_name ?? '') + (r.city ?? '')).toLowerCase().includes(search.toLowerCase()))
@@ -327,7 +343,9 @@ export default function OutreachPage() {
                         <td colSpan={6} className="px-4 py-4">
                           <ProspectDetailPanel
                             record={r}
+                            deleting={deletingId === r.id}
                             onEdit={() => openEdit(r)}
+                            onDelete={() => handleDelete(r.id)}
                           />
                         </td>
                       </tr>
@@ -363,10 +381,14 @@ export default function OutreachPage() {
 // ---------------------------------------------------------------------------
 function ProspectDetailPanel({
   record: r,
+  deleting,
   onEdit,
+  onDelete,
 }: {
   record: OutreachRecord
+  deleting: boolean
   onEdit: () => void
+  onDelete: () => void
 }) {
   const fields: [string, string | number | undefined | null][] = [
     ['City',                 r.city],
@@ -408,6 +430,10 @@ function ProspectDetailPanel({
           className="text-xs text-blue-600 hover:underline"
         >
           Edit prospect
+        </button>
+        <button onClick={onDelete} disabled={deleting}
+          className="text-xs text-red-500 hover:underline disabled:opacity-50">
+          {deleting ? 'Deleting...' : 'Delete'}
         </button>
       </div>
     </div>
