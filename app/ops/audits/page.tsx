@@ -296,7 +296,37 @@ function ScoringDrawer({
   const [auditorNotes, setAuditorNotes]     = useState(record.auditor_notes ?? '')
   const [recPackage, setRecPackage]         = useState<AuditPackage | ''>(record.recommended_package ?? '')
   const [proposalSent, setProposalSent]     = useState(record.proposal_sent ?? false)
-  const [saving, setSaving]                 = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [copied, setCopied]   = useState(false)
+
+  function handleCopyReport() {
+    const score = (key: string) => (scores[key] || '—').toUpperCase()
+    const pkg: Record<string, string> = { launch_sprint: 'Launch Sprint', growth_system: 'Growth System', ai_os: 'AI OS', not_a_fit: 'Not a Fit' }
+    const text = [
+      `FRONT OFFICE AUDIT — ${record.business_name}`,
+      `Contact: ${record.contact_name ?? '—'} | ${record.email ?? '—'}`,
+      '',
+      'AREA SCORES',
+      `  Missed Call Process:   ${score('score_missed_call')}`,
+      `  Lead Response Speed:   ${score('score_lead_response')}`,
+      `  Estimate Follow-Up:    ${score('score_estimate_followup')}`,
+      `  No-Show Recovery:      ${score('score_noshow')}`,
+      `  Stale Lead Revival:    ${score('score_stale_recovery')}`,
+      `  Pipeline Visibility:   ${score('score_pipeline_visibility')}`,
+      '',
+      'TOP FINDINGS',
+      findings.top_finding_1 ? `  1. ${findings.top_finding_1}` : '',
+      findings.top_finding_2 ? `  2. ${findings.top_finding_2}` : '',
+      findings.top_finding_3 ? `  3. ${findings.top_finding_3}` : '',
+      '',
+      `Recommended Package: ${recPackage ? (pkg[recPackage] ?? recPackage) : '—'}`,
+      `Proposal Sent: ${proposalSent ? 'Yes' : 'No'}`,
+      auditorNotes ? `\nNotes:\n${auditorNotes}` : '',
+    ].filter(l => l !== '').join('\n')
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -397,13 +427,16 @@ function ScoringDrawer({
           />
           Proposal sent
         </label>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="ml-auto text-xs bg-gray-900 text-white rounded px-4 py-1.5 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
-        >
-          {saving ? 'Saving…' : 'Save Results'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleCopyReport}
+            className="text-xs border border-gray-300 text-gray-600 rounded px-4 py-1.5 font-medium hover:bg-gray-50 transition-colors">
+            {copied ? 'Copied!' : 'Copy Report'}
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="text-xs bg-gray-900 text-white rounded px-4 py-1.5 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-wait">
+            {saving ? 'Saving…' : 'Save Results'}
+          </button>
+        </div>
       </div>
     </div>
   )
