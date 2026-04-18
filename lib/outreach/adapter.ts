@@ -125,3 +125,47 @@ export async function updateOutreachStatus(id: string, status: OutreachStatus): 
 
   if (error) throw new Error(`Failed to update status: ${error.message}`)
 }
+
+export interface ProspectPayload {
+  business_name: string
+  category: OutreachCategory
+  status?: OutreachStatus
+  city?: string
+  phone?: string
+  email?: string
+  contact_name?: string
+  contact_role?: string
+  outreach_channel?: string
+  notes?: string
+  personalization_note?: string
+}
+
+export async function createOutreachRecord(payload: ProspectPayload): Promise<OutreachRecord> {
+  const clean = Object.fromEntries(
+    Object.entries(payload).filter(([, v]) => v !== '' && v !== undefined)
+  )
+  const { data, error } = await supabase
+    .from('outreach_records')
+    .insert(clean)
+    .select()
+    .single()
+  if (error) throw new Error(`Failed to create record: ${error.message}`)
+  return mapRow(data as DBRow)
+}
+
+export async function updateOutreachRecord(
+  id: string,
+  payload: Partial<ProspectPayload>,
+): Promise<OutreachRecord> {
+  const clean = Object.fromEntries(
+    Object.entries(payload).filter(([, v]) => v !== undefined)
+  )
+  const { data, error } = await supabase
+    .from('outreach_records')
+    .update(clean)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw new Error(`Failed to update record: ${error.message}`)
+  return mapRow(data as DBRow)
+}
