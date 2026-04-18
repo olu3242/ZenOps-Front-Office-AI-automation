@@ -126,10 +126,11 @@ export default function AutomationPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <a href="/ops/audits"   className="text-sm text-blue-600 hover:underline">Audits</a>
-            <a href="/ops/leads"    className="text-sm text-blue-600 hover:underline">Leads</a>
-            <a href="/ops/tasks"    className="text-sm text-blue-600 hover:underline">Tasks</a>
-            <a href="/ops/outreach" className="text-sm text-blue-600 hover:underline">Outreach</a>
+            <a href="/ops/audits"     className="text-sm text-blue-600 hover:underline">Audits</a>
+            <a href="/ops/leads"      className="text-sm text-blue-600 hover:underline">Leads</a>
+            <a href="/ops/tasks"      className="text-sm text-blue-600 hover:underline">Tasks</a>
+            <a href="/ops/outreach"   className="text-sm text-blue-600 hover:underline">Outreach</a>
+            <a href="/automation/log" className="text-sm text-blue-600 hover:underline">Log</a>
             <button
               onClick={handleSignOut}
               disabled={signingOut}
