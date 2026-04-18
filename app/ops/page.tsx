@@ -107,6 +107,17 @@ export default function OpsDashboard() {
 
   useEffect(() => {
     fetchCounts().then(c => { setCounts(c); setLoading(false) }).catch(() => setLoading(false))
+
+    const refresh = () => fetchCounts().then(c => setCounts(c)).catch(() => {})
+
+    const channels = [
+      supabase.channel('rt-leads').on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, refresh).subscribe(),
+      supabase.channel('rt-tasks').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, refresh).subscribe(),
+      supabase.channel('rt-audits').on('postgres_changes', { event: '*', schema: 'public', table: 'front_office_audits' }, refresh).subscribe(),
+      supabase.channel('rt-outreach').on('postgres_changes', { event: '*', schema: 'public', table: 'outreach_records' }, refresh).subscribe(),
+    ]
+
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)) }
   }, [])
 
   async function handleSignOut() {
