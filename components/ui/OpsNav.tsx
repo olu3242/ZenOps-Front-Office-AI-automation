@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { label: 'Automation',  href: '/automation' },
   { label: 'Notifications', href: '/ops/notifications' },
   { label: 'Billing',       href: '/billing' },
+  { label: 'Settings',      href: '/settings' },
 ]
 
 export function OpsNav({ title, subtitle }: { title: string; subtitle?: string }) {
