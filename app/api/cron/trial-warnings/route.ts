@@ -8,8 +8,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret')
+async function run(req: NextRequest) {
+  const secret =
+    req.headers.get('x-cron-secret') ??
+    req.headers.get('authorization')?.replace('Bearer ', '')
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -55,3 +57,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ sent })
 }
+
+export const GET  = run
+export const POST = run
